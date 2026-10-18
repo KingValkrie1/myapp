@@ -1,7 +1,7 @@
 'use server';
 
 import { z } from 'zod';
-import { hash, verify } from 'oslo/password';
+import { Scrypt } from 'oslo/password';
 import { eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
@@ -21,7 +21,9 @@ export async function signupAction(formData: FormData) {
   const existing = await db.select().from(users).where(eq(users.email, parsed.data.email)).limit(1);
   if (existing.length) return { error: 'Email sudah terdaftar' };
 
-  const passwordHash = await hash(parsed.data.password);
+  const scrypt = new Scrypt();
+  const passwordHash = await scrypt.hash(parsed.data.password);
+  
   const [created] = await db.insert(users).values({
     email: parsed.data.email, passwordHash,
   }).returning();
@@ -42,7 +44,8 @@ export async function loginAction(formData: FormData) {
   const [user] = await db.select().from(users).where(eq(users.email, parsed.data.email)).limit(1);
   if (!user) return { error: 'Email atau password salah' };
 
-  const ok = await verify(user.passwordHash, parsed.data.password);
+  const scrypt = new Scrypt();
+  const ok = await scrypt.verify(user.passwordHash, parsed.data.password);
   if (!ok) return { error: 'Email atau password salah' };
 
   const session = await lucia.createSession(user.id, {});
